@@ -15,3 +15,7 @@ Once all enemy bacteria are eaten, the level is over and a new one will be set u
 
 ## Purpose
 Created to experiment with canvas and classes
+
+
+## Known Bugs
+- Sometimes the direction of an enemy bacterium will repeatedly reverse with each frame when near food, causing it to freeze in place until the food is eaten.
