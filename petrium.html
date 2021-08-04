@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>PETRIUM</title>
+        <style></style>
+    </head>
+    <body>
+        <canvas id='gameCanvas' width="720" height="480"></canvas>
+    </body>
+    <script>
+        const FPS = 30; // frames per second
+        const GRID_BACKGROUND = '#CADC9F';
+        const PLAYER_COLOR = '#0F380F';
+        const UI_COLOR = '#0F380F';
+        const FOOD_COLOR = "purple";
+        const INITIAL_SEGMENTS = 5; // initial length
+        const INITIAL_SPEED = 100; // initial SPEED
+        const SPEED_MOD = 0.1; // speed modifier
+        const PLAYER_SIZE = 20; // accelleration in px/s
+        const FOOD_SIZE = 10;
+        const SHOW_BOUNDING = false; // show collision bounding
+        const UI_SIZE = 40 // hud font size
+        const ROTATION_SPEED = 360; // degrees per second
+        const EATING_SPEED = 0.3 // eating speed
+        const GROW_INCREMENT = 1;
+        const THREAT_MOD = 10; // multiplier for range of detecting player and food
+        const PLAYER_INVULN_DUR = 3; // new BACTERIA invulnurability, in seconds
+        const PLAYER_BLINK_DUR = 0.1; // ship invuln blink, in seconds
+        const UI_FADE_TIME = 2.5 // hud fade time
+
+        const canv = document.getElementById('gameCanvas');
+        const ctx = canv.getContext("2d");
+
+
+        class Player {
+            constructor(x, y, r, s) {
+                this.x = x,
+                this.y = y,
+                this.direction = 90 / 180 * Math.PI, // convert to radians.
+                this.rotation = r;
+                this.size = s;
+                this.dead = false;
+                this.moving = false;
+                this.segments = [];
+                this.speed = INITIAL_SPEED;
+                this.eating = false;
+                this.eatingTime = 0,
+                this.lastAteLoc = {}
+                this.blinkNum = Math.ceil(PLAYER_INVULN_DUR / PLAYER_BLINK_DUR),
+                this.blinkTime = Math.ceil(PLAYER_BLINK_DUR * FPS),
+
+                this.segments.push({x: this.x, y: this.x, direction: this.direction})
+                for(let i = 1; i < INITIAL_SEGMENTS; i++) {
+                    this.segments.push({x: this.x, y: this.y, direction: this.direction})
+                }
+            }
+            drawPlayer(blinkOn){
+                if(this.moving === true) {
+
+                    //rotate this
+                    this.direction += this.rotation;
+                    // move this
+                    this.x += this.speed * Math.cos(this.direction) / FPS;
+                    this.y -= this.speed * Math.sin(this.direction) / FPS;
+                    
+                    if (this.x > canv.width - this.size) {this.x = canv.width - this.size}
+                    if (this.x < 0 + this.size) {this.x = 0 + this.size}
+                    if (this.y > canv.height - this.size) {this.y = canv.height - this.size}
+                    if (this.y < 0 + this.size) {this.y = 0 + this.size}
+                }
+                    // draw each circle
+                    const head = {
+                        x: this.x,
+                        y: this.y
+                    }
+                    this.segments.unshift(head);
+                    this.segments.pop();
+                    for(let i = 0; i < this.segments.length; i++) {
+                        this.drawSegment(this.segments[i].x, this.segments[i].y);
+                    }
+            }
+            drawSegment(x, y){
+                let color;
+
+                if (this.blinkNum > 0) {
+                    this.blinkTime--;
+                    color = GRID_BACKGROUND
+                    if (this.blinkTime === 0) {
+                        color = PLAYER_COLOR
+                        this.blinkTime = Math.ceil(PLAYER_BLINK_DUR * FPS);
+                        this.blinkNum--;
+                    }
+                } else {
+                    color = PLAYER_COLOR;
+                }
+                if (this.eating && x === this.x && y === this.y){
+                    this.eatingTime--;
+                    if (this.eatingTime === 0) {
+                        this.eating = false;
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(x, y, this.size, 0, Math.PI * 2, false);
+                        ctx.fill();
+                    } else {
+                        this.eatingTime--
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size * 1.2, 0, Math.PI * 2, false);
+                        ctx.fill();
+                    }
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(x, y, this.size, 0, Math.PI * 2, false);
+                    ctx.fill();
+                }
+            }
+            grow(){
+                this.size += GROW_INCREMENT
+                this.increaseSpeed()
+            }
+            increaseSpeed(){
+                if(this.speed <= INITIAL_SPEED * 2) {
+                    this.speed = this.speed + (this.speed * SPEED_MOD)
+                }
+            }
+            consumeFood(){
+                this.lastAteLoc = {
+                    x: this.x,
+                    y: this.y
+                }
+                this.eating = true;
+                this.eatingTime = Math.ceil(EATING_SPEED * FPS);
+                score += 20
+                checkHighScore();
+                this.grow();
+            }
+            consumeBacteria(enemy, i){
+                this.eating = true;
+                this.eatingTime = Math.ceil(EATING_SPEED * FPS);
+                score += 5 * enemy.size;
+                checkHighScore();
+                this.grow();
+                enemies.splice(i, 1);
+            }
+        }
+
+
+        class Bacteria {
+            constructor(x, y, r, s) {
+                this.x = x,
+                this.y = y,
+                this.direction = 90 / 180 * Math.PI, // convert to radians.
+                this.rotation = r;
+                this.size = s;
+                this.moving = false;
+                this.segments = [];
+                this.speed = INITIAL_SPEED - s;
+                this.eating = false;
+                this.eatingTime = 0;
+
+                this.segments.push({x: this.x, y: this.x, direction: this.direction})
+                for(let i = 1; i < (this.size / 5); i++) {
+                    this.segments.push({x: this.x, y: this.y, direction: this.direction})
+                }
+            }
+            drawBacteria(){
+                    
+                    this.aiBehavior();
+                    
+                    if (this.x > canv.width - this.size) {this.x = canv.width - this.size}
+                    if (this.x < 0 + this.size) {this.x = 0 + this.size}
+                    if (this.y > canv.height - this.size) {this.y = canv.height - this.size}
+                    if (this.y < 0 + this.size) {this.y = 0 + this.size}
+                    // draw each circle
+                    const head = {
+                        x: this.x,
+                        y: this.y
+                    }
+                    this.segments.unshift(head);
+                    this.segments.pop();
+                    for(let i = 0; i < this.segments.length; i++) {
+                        this.drawSegment(this.segments[i].x, this.segments[i].y);
+                    }
+            }
+            drawSegment(x, y){
+                let color
+                let pSize = player.size;
+                if (this.size >= pSize) {
+                    let saturation = ((this.size - pSize) * 5) + Math.floor(255/2)
+                    if (saturation > 255) {saturation = 255}
+                    color = `rgb(${saturation}, 0, 0)`
+                } else {
+                    let saturation = ((this.size - pSize) * 5) + Math.floor(255/2)
+                    if (saturation > 255) {saturation = 255}
+                    color = `rgb(${saturation}, 0, ${saturation})`
+                }
+                if (this.eating && x === this.segments[0].x && y === this.segments[0].y){
+                    if (this.eatingTime === 0) {
+                        this.eating = false;
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(x, y, this.size, 0, Math.PI * 2, false);
+                        ctx.fill();
+                    } else {
+                        this.eatingTime--
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size * 1.2, 0, Math.PI * 2, false);
+                        ctx.fill();
+                    }
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(x, y, this.size, 0, Math.PI * 2, false);
+                    ctx.fill();
+                }
+            }
+            grow(){
+                this.size += GROW_INCREMENT
+                this.changeSpeed()
+            }
+            changeSpeed(){
+                this.speed -= this.size / PLAYER_SIZE;
+            }
+            consumeFood(){
+                this.eating = true;
+                this.eatingTime = Math.ceil(EATING_SPEED * FPS);
+                this.grow();
+            }
+            consumePlayer(){
+                this.eating = true;
+                this.eatingTime = Math.ceil(EATING_SPEED * FPS);
+                gameOver();
+            }
+            aiBehavior(){
+                const bacteriaSize = this.size;
+                const playerSize = player.size;
+                const sensoryRange = this.size * THREAT_MOD
+                const distToPlayer = distanceBetweenPoints(this.x, this.y, player.x, player.y);
+                const distToFood = distanceBetweenPoints(this.x, this.y, food.x, food.y);
+                if (distToPlayer < sensoryRange) {
+                    if (bacteriaSize > playerSize * 2) {
+                        this.aiAggressive()
+                    } else if (bacteriaSize * 2 < playerSize) {
+                        this.aiCoward()
+                    } else {
+                        this.aiRandom();
+                    }
+                } else if (distToFood < sensoryRange) {
+                    this.aiHungry();
+                } else {
+                    this.aiRandom();
+                }
+            }
+            aiAggressive(){
+                //console.log('aggressive')
+                // AI will move towards player
+                    let angle = (Math.atan2(this.x - player.x, this.y - player.y)*(180 / Math.PI));
+                    this.direction = angle;
+                    this.x += this.speed * Math.cos(this.direction) / FPS;
+                    this.y -= this.speed * Math.sin(this.direction) / FPS;
+            }
+            aiCoward(){
+                //console.log('coward')
+                // AI will move away from player
+                let angle = -(Math.atan2(this.x - player.x, this.y - player.y)*(180 / Math.PI));  
+                this.direction = angle;
+                this.x += this.speed * Math.cos(this.direction) / FPS;
+                this.y -= this.speed * Math.sin(this.direction) / FPS;
+            }
+            aiHungry(){
+                //console.log('hungry')
+                // AI will move towards food
+                let angle = (Math.atan2(this.x - food.x, this.y - food.y)*(180 / Math.PI));  
+                this.direction = angle;
+                this.x += this.speed * Math.cos(this.direction) / FPS;
+                this.y -= this.speed * Math.sin(this.direction) / FPS;
+                //TODO, this.y bugs during certain approaches to food, where the bacteria simply vibrates in place.
+            }
+            aiRandom(){
+                //console.log('random')
+                // AI behaves randomly
+                const movingLeft = Math.floor(Math.random() * ((360) - 0) + 0);
+                if (movingLeft < 180) {
+                    this.rotation = ROTATION_SPEED / 180 * Math.PI / FPS;
+                } else { 
+                    this.rotation = -ROTATION_SPEED / 180 * Math.PI / FPS;
+                }
+                this.direction += this.rotation;
+                this.x += this.speed * Math.cos(this.direction) / FPS;
+                this.y -= this.speed * Math.sin(this.direction) / FPS;
+            }
+        }
+
+
+        class Food {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+
+            }
+            drawFood(){
+                ctx.fillStyle = FOOD_COLOR;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, FOOD_SIZE, 0, Math.PI * 2, false);
+                ctx.fill();
+            }
+        }
+
+        function keyDown(e){
+            if (player.dead) return
+            switch (e.key) {
+                case ' ':
+                    player.moving = true;
+                    break;
+                case 'a':
+                    player.oldRotation = player.rotation
+                    player.rotation = ROTATION_SPEED / 180 * Math.PI / FPS;
+                    break;
+                case 'ArrowLeft':
+                    player.oldRotation = player.rotation
+                    player.rotation = ROTATION_SPEED / 180 * Math.PI / FPS;
+                    break;
+                case 'd':
+                    player.oldRotation = player.rotation
+                    player.rotation = -ROTATION_SPEED / 180 * Math.PI / FPS;
+                    break;
+                case 'ArrowRight':
+                    player.oldRotation = player.rotation
+                    player.rotation = -ROTATION_SPEED / 180 * Math.PI / FPS;
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        function keyUp(e){
+            if (player.dead) return
+            switch (e.key) {
+                case 'a':
+                    player.rotation = 0;
+                    break;
+                case 'ArrowLeft':
+                    player.rotation = 0;
+                    break;
+                case 'd':
+                    player.rotation = 0;
+                    break;
+                case 'ArrowRight':
+                    player.rotation = 0;
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        function distanceBetweenPoints(x1, y1, x2, y2){
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+
+        // set up game loop
+        setInterval(update, 1000 / FPS);
+
+        //Event Handlers
+        document.addEventListener('keydown', keyDown);
+        document.addEventListener('keyup', keyUp);
+
+        function drawSpace(){
+                ctx.fillStyle = GRID_BACKGROUND;
+                ctx.fillRect(0, 0, canv.width, canv.height);
+
+        };
+        // START GAME
+        let player, enemies, score, scoreHigh, length, food, text, textAlpha, level
+        newGame();
+
+        function newGame(){
+            // CREATE PLAYER
+            player = new Player(canv.width / 2, canv.height / 2, 0, PLAYER_SIZE)
+            score = 0;
+            level = 0;
+            scoreHigh = parseInt(localStorage.getItem('centipedes_scoreHigh')) || 0;
+            enemies = [];
+            textAlpha = 1.0;
+            const foodx = Math.floor(Math.random() * (canv.width - PLAYER_SIZE) + PLAYER_SIZE);
+            const foody = Math.floor(Math.random() * (canv.height - PLAYER_SIZE) + PLAYER_SIZE);
+            food = new Food(foodx, foody);
+            newLevel()
+
+        };
+
+        function newLevel() {
+            text = `Level ${level + 1}`
+            if (level === 0) text = `Press Space to Start`;
+            textAlpha = 1.0;
+            textAlpha = 1.0;
+            createBacteria();
+        }
+        function createBacteria() {
+            let x, y, s;
+            for (let i = 0; i < 1 + level; i++) {
+                    do {
+                        x = Math.floor(Math.random() * canv.width);
+                        y = Math.floor(Math.random() * canv.height);
+                    } while(distanceBetweenPoints(player.x, player.y, x, y) < PLAYER_SIZE * (level + 3) + PLAYER_SIZE)
+                    let r = Math.floor(Math.random() * ((360) - 0) + 0);
+                    let s = (level + (i * 3 + 1) + PLAYER_SIZE);
+                    let bact = new Bacteria(x, y, r, s);
+                    enemies.push(bact)
+                }
+        }
+
+        function checkHighScore() {
+            if (score > scoreHigh) {
+                scoreHigh = score;
+                localStorage.setItem('centipedes_scoreHigh', scoreHigh);
+            }
+        }
+        function gameOver() {
+            player.dead = true;
+            text = 'GAME OVER';
+        }
+
+
+        function drawScore(){
+            ctx.textAlign = "right";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = UI_COLOR;
+            ctx.font = `normal ${UI_SIZE}px Courier New`
+            ctx.fillText(score, canv.width - PLAYER_SIZE / 2, 0 + PLAYER_SIZE);
+        }
+        function drawScoreHigh(){
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = UI_COLOR;
+            ctx.font = `normal ${UI_SIZE * 0.5}px Courier New`
+            ctx.fillText(`High Score: ${scoreHigh}`, canv.width / 2, 0 + PLAYER_SIZE);
+        }
+        function update() {
+            let blinkOn = player.blinkNum % 2 === 0;
+
+            // draw space
+            drawSpace()
+
+            player.drawPlayer(blinkOn)
+            
+            enemies.forEach((enemy, i) => {
+                enemy.drawBacteria();
+                if (player.blinkNum === 0){
+                    if (distanceBetweenPoints(enemy.x, enemy.y, player.x, player.y) < player.size * 2){
+                        if(enemy.size >= player.size){
+                            enemy.consumePlayer();
+                        } else {
+                            player.consumeBacteria(enemy, i);
+                        }
+                    }
+                }
+                if (distanceBetweenPoints(enemy.x, enemy.y, food.x, food.y) < enemy.size * 1.5){
+                    const foodx = Math.floor(Math.random() * ((canv.width - enemy.size) - enemy.size) + player.size);
+                    const foody = Math.floor(Math.random() * ((canv.height - enemy.size) - enemy.size) + enemy.size);
+                    enemy.consumeFood()
+                    food = new Food(foodx, foody);
+                }
+
+
+            })
+
+            // if all bacteria eaten new level
+            if(enemies.length === 0) {
+                player.size = 0;
+                level++;
+                player = new Player(canv.width / 2, canv.height / 2, 0, PLAYER_SIZE)
+                newLevel();
+            }
+
+            //SCORE and highscore
+            drawScore();
+            drawScoreHigh();
+
+            if (distanceBetweenPoints(player.x, player.y, food.x, food.y) <= player.size * 1.5){
+                const foodx = Math.floor(Math.random() * ((canv.width - player.size) - player.size) + player.size);
+                const foody = Math.floor(Math.random() * ((canv.height - player.size) - player.size) + player.size);
+                player.consumeFood()
+                food = new Food(foodx, foody);
+            }
+            
+            food.drawFood();
+
+            // HUD
+            if (player.dead){
+                newGame();
+            } 
+
+            // HUD
+            if (textAlpha >= 0) {
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillStyle = UI_COLOR
+                ctx.font = `normal ${UI_SIZE}px Courier New`
+                ctx.fillText(text, canv.width / 2, canv.height * 0.75);
+                textAlpha -= (1.0 / UI_FADE_TIME / FPS);
+            } else if (player.dead){
+                newGame();
+            }
+        }
+    </script>
+</html>
