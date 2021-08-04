@@ -1,6 +1,8 @@
 # Petrium
 A game in which you take the role of a green bacterium trying to survive in this oddly rectangular petri dish.
 
+Game: https://kdavidenko.github.io/petrium/petrium.html
+
 ## Controls
 A or LeftArrow - rotate left
 D or RightArrow - rotate right
